@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Markdown Converter</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f0f;
+      color: #e5e5e5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 24px;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #fff;
+    }
+
+    p.subtitle {
+      color: #888;
+      margin-bottom: 40px;
+      font-size: 0.95rem;
+    }
+
+    #drop-zone {
+      width: 100%;
+      max-width: 560px;
+      border: 2px dashed #333;
+      border-radius: 12px;
+      padding: 48px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      background: #1a1a1a;
+    }
+
+    #drop-zone.drag-over {
+      border-color: #6366f1;
+      background: #1e1e2e;
+    }
+
+    #drop-zone svg {
+      width: 40px;
+      height: 40px;
+      margin-bottom: 12px;
+      color: #555;
+    }
+
+    #drop-zone p {
+      color: #888;
+      font-size: 0.9rem;
+    }
+
+    #drop-zone p span {
+      color: #6366f1;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    #file-input { display: none; }
+
+    #status {
+      margin-top: 20px;
+      font-size: 0.9rem;
+      color: #888;
+      min-height: 20px;
+    }
+
+    #result-section {
+      display: none;
+      width: 100%;
+      max-width: 800px;
+      margin-top: 32px;
+    }
+
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .result-header span {
+      font-size: 0.85rem;
+      color: #888;
+    }
+
+    .btn-group { display: flex; gap: 8px; }
+
+    button {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: none;
+      font-size: 0.85rem;
+      cursor: pointer;
+      font-weight: 500;
+      transition: opacity 0.15s;
+    }
+
+    button:hover { opacity: 0.85; }
+
+    .btn-copy { background: #6366f1; color: #fff; }
+    .btn-download { background: #222; color: #ccc; border: 1px solid #333; }
+    .btn-clear { background: #222; color: #888; border: 1px solid #333; }
+
+    #output {
+      width: 100%;
+      min-height: 360px;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 20px;
+      font-family: 'Menlo', 'Monaco', monospace;
+      font-size: 0.82rem;
+      color: #d4d4d4;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-y: auto;
+      max-height: 600px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Markdown Converter</h1>
+  <p class="subtitle">Upload a PDF or CSV and get clean markdown output</p>
+
+  <div id="drop-zone">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+        d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+    </svg>
+    <p>Drag & drop a PDF or CSV here<br/>or <span id="browse-link">browse to upload</span></p>
+    <input type="file" id="file-input" accept=".pdf,.csv,.docx,.xlsx,.pptx,.html,.txt" />
+  </div>
+
+  <div id="status"></div>
+
+  <div id="result-section">
+    <div class="result-header">
+      <span id="file-label"></span>
+      <div class="btn-group">
+        <button class="btn-copy" onclick="copyMarkdown()">Copy</button>
+        <button class="btn-download" onclick="downloadMarkdown()">Download .md</button>
+        <button class="btn-clear" onclick="clearResult()">Clear</button>
+      </div>
+    </div>
+    <div id="output"></div>
+  </div>
+
+  <script>
+    const dropZone = document.getElementById('drop-zone')
+    const fileInput = document.getElementById('file-input')
+    const status = document.getElementById('status')
+    const resultSection = document.getElementById('result-section')
+    const output = document.getElementById('output')
+    const fileLabel = document.getElementById('file-label')
+
+    let currentFilename = 'output.md'
+    let currentMarkdown = ''
+
+    document.getElementById('browse-link').addEventListener('click', () => fileInput.click())
+    fileInput.addEventListener('change', () => { if (fileInput.files[0]) convert(fileInput.files[0]) })
+
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over') })
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'))
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault()
+      dropZone.classList.remove('drag-over')
+      if (e.dataTransfer.files[0]) convert(e.dataTransfer.files[0])
+    })
+
+    async function convert(file) {
+      status.textContent = `Converting ${file.name}...`
+      resultSection.style.display = 'none'
+
+      const form = new FormData()
+      form.append('file', file)
+
+      try {
+        const endpoint = window.location.hostname === 'localhost' ? '/convert' : '/.netlify/functions/convert'
+        const res = await fetch(endpoint, { method: 'POST', body: form })
+        const data = await res.json()
+
+        if (data.error) {
+          status.textContent = 'Error: ' + data.error
+          return
+        }
+
+        currentMarkdown = data.markdown
+        currentFilename = data.filename
+        output.textContent = data.markdown
+        fileLabel.textContent = file.name + ' → markdown'
+        resultSection.style.display = 'block'
+        status.textContent = ''
+      } catch (err) {
+        status.textContent = 'Request failed: ' + err.message
+      }
+    }
+
+    function copyMarkdown() {
+      navigator.clipboard.writeText(currentMarkdown)
+        .then(() => { const btn = document.querySelector('.btn-copy'); btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy', 1500) })
+    }
+
+    function downloadMarkdown() {
+      const blob = new Blob([currentMarkdown], { type: 'text/markdown' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = currentFilename
+      a.click()
+    }
+
+    function clearResult() {
+      resultSection.style.display = 'none'
+      output.textContent = ''
+      status.textContent = ''
+      fileInput.value = ''
+    }
+  </script>
+</body>
+</html>

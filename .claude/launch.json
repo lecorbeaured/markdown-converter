@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "markdown-converter",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server.js"],
+      "port": 3333,
+      "autoPort": false
+    }
+  ]
+}
