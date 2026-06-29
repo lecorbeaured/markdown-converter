@@ -167,6 +167,30 @@
       overflow-y: auto;
     }
 
+    #md-render-offscreen {
+      position: fixed;
+      left: -9999px;
+      top: 0;
+      background: #fff;
+      color: #111;
+      padding: 40px 48px;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 15px;
+      line-height: 1.7;
+      width: 794px;
+    }
+    #md-render-offscreen h1, #md-render-offscreen h2, #md-render-offscreen h3 { margin: 1.2em 0 0.5em; font-family: -apple-system, sans-serif; }
+    #md-render-offscreen p { margin: 0.6em 0; }
+    #md-render-offscreen code { background: #f3f3f3; padding: 2px 5px; border-radius: 3px; font-size: 0.88em; }
+    #md-render-offscreen pre { background: #f3f3f3; padding: 12px; border-radius: 6px; overflow-x: auto; }
+    #md-render-offscreen blockquote { border-left: 3px solid #ccc; padding-left: 14px; color: #555; margin: 0.8em 0; }
+    #md-render-offscreen table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+    #md-render-offscreen th, #md-render-offscreen td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+    #md-render-offscreen th { background: #f5f5f5; font-weight: 600; }
+    #md-render-offscreen ul, #md-render-offscreen ol { padding-left: 1.5em; margin: 0.6em 0; }
+    #md-render-offscreen a { color: #6366f1; }
+    #md-render-offscreen hr { border: none; border-top: 1px solid #ddd; margin: 1.5em 0; }
+
     #md-preview h1, #md-preview h2, #md-preview h3 { margin: 1.2em 0 0.5em; font-family: -apple-system, sans-serif; }
     #md-preview p { margin: 0.6em 0; }
     #md-preview code { background: #f3f3f3; padding: 2px 5px; border-radius: 3px; font-size: 0.88em; }
@@ -233,7 +257,14 @@
     </div>
   </div>
 
+  <!-- Offscreen full-height render target for PDF export -->
+  <div id="md-render-offscreen"></div>
+
   <script>
+    // Block browser default file-drop on the whole page (prevents new tab)
+    document.addEventListener('dragover', (e) => e.preventDefault())
+    document.addEventListener('drop', (e) => e.preventDefault())
+
     // Tab switching
     function switchTab(tab) {
       document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', (i === 0) === (tab === 'to-md')))
@@ -350,11 +381,15 @@
 
       document.getElementById('pdf-status').textContent = 'Generating PDF...'
 
-      // Render into the preview first
+      // Also update visible preview
       document.getElementById('md-preview').innerHTML = marked.parse(md)
       document.getElementById('preview-section').style.display = 'block'
 
-      const preview = document.getElementById('md-preview')
+      // Render into offscreen div (no max-height) for full capture
+      const offscreen = document.getElementById('md-render-offscreen')
+      offscreen.innerHTML = marked.parse(md)
+
+      const preview = offscreen
       const { jsPDF } = window.jspdf
 
       try {
