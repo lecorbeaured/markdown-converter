@@ -219,7 +219,7 @@
 
   <!-- Markdown → PDF -->
   <div class="panel" id="panel-to-pdf">
-    <textarea id="md-input" placeholder="Paste or type your markdown here..."></textarea>
+    <textarea id="md-input" placeholder="Paste, type, or drop a .md or .pdf file here..."></textarea>
     <div class="pdf-actions">
       <button class="btn-muted" onclick="clearPdf()">Clear</button>
       <button class="btn-secondary" onclick="previewPdf()">Preview</button>
@@ -306,6 +306,35 @@
       fileInput.value = ''
     }
 
+    // ── Markdown → PDF drag-and-drop ─────────────────────────────
+    const mdInput = document.getElementById('md-input')
+    mdInput.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation() })
+    mdInput.addEventListener('drop', async (e) => {
+      e.preventDefault(); e.stopPropagation()
+      const file = e.dataTransfer.files[0]
+      if (!file) return
+      const ext = file.name.split('.').pop().toLowerCase()
+      if (ext === 'md' || ext === 'txt') {
+        mdInput.value = await file.text()
+        previewPdf()
+      } else {
+        document.getElementById('pdf-status').textContent = `Converting ${file.name}...`
+        const form = new FormData()
+        form.append('file', file)
+        try {
+          const endpoint = window.location.hostname === 'localhost' ? '/convert' : '/.netlify/functions/convert'
+          const res = await fetch(endpoint, { method: 'POST', body: form })
+          const data = await res.json()
+          if (data.error) { document.getElementById('pdf-status').textContent = 'Error: ' + data.error; return }
+          mdInput.value = data.markdown
+          document.getElementById('pdf-status').textContent = ''
+          previewPdf()
+        } catch (err) {
+          document.getElementById('pdf-status').textContent = 'Request failed: ' + err.message
+        }
+      }
+    })
+
     // ── Markdown → PDF ────────────────────────────────────────────
     function previewPdf() {
       const md = document.getElementById('md-input').value.trim()
@@ -330,27 +359,27 @@
 
       try {
         const canvas = await html2canvas(preview, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
-        const imgData = canvas.toDataURL('image/png')
         const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+        const margin = 10
         const pageW = pdf.internal.pageSize.getWidth()
         const pageH = pdf.internal.pageSize.getHeight()
-        const imgW = pageW - 20
-        const imgH = (canvas.height * imgW) / canvas.width
-        let yPos = 10
-        let remaining = imgH
+        const contentW = pageW - margin * 2
+        const contentH = pageH - margin * 2
+        // pixels per mm based on content width
+        const pxPerMm = canvas.width / contentW
+        const pageHeightPx = contentH * pxPerMm
+        const totalPages = Math.ceil(canvas.height / pageHeightPx)
 
-        while (remaining > 0) {
-          const sliceH = Math.min(remaining, pageH - 20)
-          const srcY = (imgH - remaining) * (canvas.height / imgH)
-          const srcH = sliceH * (canvas.height / imgH)
+        for (let i = 0; i < totalPages; i++) {
+          if (i > 0) pdf.addPage()
+          const srcY = i * pageHeightPx
+          const srcH = Math.min(pageHeightPx, canvas.height - srcY)
           const sliceCanvas = document.createElement('canvas')
           sliceCanvas.width = canvas.width
           sliceCanvas.height = srcH
           sliceCanvas.getContext('2d').drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH)
-          if (remaining < imgH) pdf.addPage()
-          pdf.addImage(sliceCanvas.toDataURL('image/png'), 'PNG', 10, yPos, imgW, sliceH)
-          remaining -= sliceH
-          yPos = 10
+          const sliceH = srcH / pxPerMm
+          pdf.addImage(sliceCanvas.toDataURL('image/png'), 'PNG', margin, margin, contentW, sliceH)
         }
 
         pdf.save('document.pdf')
