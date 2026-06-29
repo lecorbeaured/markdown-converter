@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <title>Markdown Converter</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -19,22 +22,40 @@
       padding: 48px 24px;
     }
 
-    h1 {
-      font-size: 1.8rem;
-      font-weight: 600;
-      margin-bottom: 8px;
-      color: #fff;
+    h1 { font-size: 1.8rem; font-weight: 600; margin-bottom: 8px; color: #fff; }
+    p.subtitle { color: #888; margin-bottom: 32px; font-size: 0.95rem; }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 4px;
+      margin-bottom: 32px;
     }
 
-    p.subtitle {
+    .tab {
+      padding: 8px 20px;
+      border-radius: 7px;
+      border: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      background: transparent;
       color: #888;
-      margin-bottom: 40px;
-      font-size: 0.95rem;
+      transition: all 0.15s;
     }
 
+    .tab.active { background: #6366f1; color: #fff; }
+    .tab:hover:not(.active) { color: #ccc; }
+
+    .panel { display: none; width: 100%; max-width: 700px; flex-direction: column; align-items: center; }
+    .panel.active { display: flex; }
+
+    /* --- File → Markdown panel --- */
     #drop-zone {
       width: 100%;
-      max-width: 560px;
       border: 2px dashed #333;
       border-radius: 12px;
       padding: 48px 24px;
@@ -44,44 +65,16 @@
       background: #1a1a1a;
     }
 
-    #drop-zone.drag-over {
-      border-color: #6366f1;
-      background: #1e1e2e;
-    }
+    #drop-zone.drag-over { border-color: #6366f1; background: #1e1e2e; }
 
-    #drop-zone svg {
-      width: 40px;
-      height: 40px;
-      margin-bottom: 12px;
-      color: #555;
-    }
-
-    #drop-zone p {
-      color: #888;
-      font-size: 0.9rem;
-    }
-
-    #drop-zone p span {
-      color: #6366f1;
-      text-decoration: underline;
-      cursor: pointer;
-    }
-
+    #drop-zone svg { width: 40px; height: 40px; margin-bottom: 12px; color: #555; }
+    #drop-zone p { color: #888; font-size: 0.9rem; }
+    #drop-zone p span { color: #6366f1; text-decoration: underline; cursor: pointer; }
     #file-input { display: none; }
 
-    #status {
-      margin-top: 20px;
-      font-size: 0.9rem;
-      color: #888;
-      min-height: 20px;
-    }
+    #status { margin-top: 20px; font-size: 0.9rem; color: #888; min-height: 20px; }
 
-    #result-section {
-      display: none;
-      width: 100%;
-      max-width: 800px;
-      margin-top: 32px;
-    }
+    #result-section { display: none; width: 100%; margin-top: 32px; }
 
     .result-header {
       display: flex;
@@ -90,12 +83,8 @@
       margin-bottom: 12px;
     }
 
-    .result-header span {
-      font-size: 0.85rem;
-      color: #888;
-    }
-
-    .btn-group { display: flex; gap: 8px; }
+    .result-header span { font-size: 0.85rem; color: #888; }
+    .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
 
     button {
       padding: 8px 16px;
@@ -108,10 +97,9 @@
     }
 
     button:hover { opacity: 0.85; }
-
-    .btn-copy { background: #6366f1; color: #fff; }
-    .btn-download { background: #222; color: #ccc; border: 1px solid #333; }
-    .btn-clear { background: #222; color: #888; border: 1px solid #333; }
+    .btn-primary { background: #6366f1; color: #fff; }
+    .btn-secondary { background: #222; color: #ccc; border: 1px solid #333; }
+    .btn-muted { background: #222; color: #888; border: 1px solid #333; }
 
     #output {
       width: 100%;
@@ -128,36 +116,132 @@
       overflow-y: auto;
       max-height: 600px;
     }
+
+    /* --- Markdown → PDF panel --- */
+    #md-input {
+      width: 100%;
+      min-height: 320px;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 20px;
+      font-family: 'Menlo', 'Monaco', monospace;
+      font-size: 0.82rem;
+      color: #d4d4d4;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    #md-input:focus { border-color: #6366f1; }
+    #md-input::placeholder { color: #444; }
+
+    .pdf-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+      width: 100%;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+
+    #pdf-status { margin-top: 12px; font-size: 0.85rem; color: #888; width: 100%; text-align: center; min-height: 20px; }
+
+    #preview-section {
+      display: none;
+      width: 100%;
+      margin-top: 28px;
+    }
+
+    #preview-label { font-size: 0.85rem; color: #888; margin-bottom: 10px; }
+
+    #md-preview {
+      background: #fff;
+      color: #111;
+      border-radius: 10px;
+      padding: 40px 48px;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 15px;
+      line-height: 1.7;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+
+    #md-preview h1, #md-preview h2, #md-preview h3 { margin: 1.2em 0 0.5em; font-family: -apple-system, sans-serif; }
+    #md-preview p { margin: 0.6em 0; }
+    #md-preview code { background: #f3f3f3; padding: 2px 5px; border-radius: 3px; font-size: 0.88em; }
+    #md-preview pre { background: #f3f3f3; padding: 12px; border-radius: 6px; overflow-x: auto; }
+    #md-preview blockquote { border-left: 3px solid #ccc; padding-left: 14px; color: #555; margin: 0.8em 0; }
+    #md-preview table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+    #md-preview th, #md-preview td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+    #md-preview th { background: #f5f5f5; font-weight: 600; }
+    #md-preview ul, #md-preview ol { padding-left: 1.5em; margin: 0.6em 0; }
+    #md-preview a { color: #6366f1; }
+    #md-preview hr { border: none; border-top: 1px solid #ddd; margin: 1.5em 0; }
   </style>
 </head>
 <body>
   <h1>Markdown Converter</h1>
-  <p class="subtitle">Upload a PDF or CSV and get clean markdown output</p>
+  <p class="subtitle">Convert files to markdown — or markdown to PDF</p>
 
-  <div id="drop-zone">
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-        d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
-    </svg>
-    <p>Drag & drop a PDF or CSV here<br/>or <span id="browse-link">browse to upload</span></p>
-    <input type="file" id="file-input" accept=".pdf,.csv,.docx,.xlsx,.pptx,.html,.txt" />
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('to-md')">File → Markdown</button>
+    <button class="tab" onclick="switchTab('to-pdf')">Markdown → PDF</button>
   </div>
 
-  <div id="status"></div>
-
-  <div id="result-section">
-    <div class="result-header">
-      <span id="file-label"></span>
-      <div class="btn-group">
-        <button class="btn-copy" onclick="copyMarkdown()">Copy</button>
-        <button class="btn-download" onclick="downloadMarkdown()">Download .md</button>
-        <button class="btn-clear" onclick="clearResult()">Clear</button>
-      </div>
+  <!-- File → Markdown -->
+  <div class="panel active" id="panel-to-md">
+    <div id="drop-zone">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+          d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+      </svg>
+      <p>Drag & drop a file here<br/>or <span id="browse-link">browse to upload</span></p>
+      <p style="margin-top:8px;font-size:0.78rem;color:#555;">PDF · CSV · DOCX · XLSX · TXT · HTML</p>
+      <input type="file" id="file-input" accept=".pdf,.csv,.docx,.xlsx,.html,.txt,.md" />
     </div>
-    <div id="output"></div>
+
+    <div id="status"></div>
+
+    <div id="result-section">
+      <div class="result-header">
+        <span id="file-label"></span>
+        <div class="btn-group">
+          <button class="btn-primary" onclick="copyMarkdown()">Copy</button>
+          <button class="btn-secondary" onclick="downloadMarkdown()">Download .md</button>
+          <button class="btn-secondary" onclick="sendToPdf()">Export as PDF</button>
+          <button class="btn-muted" onclick="clearResult()">Clear</button>
+        </div>
+      </div>
+      <div id="output"></div>
+    </div>
+  </div>
+
+  <!-- Markdown → PDF -->
+  <div class="panel" id="panel-to-pdf">
+    <textarea id="md-input" placeholder="Paste or type your markdown here..."></textarea>
+    <div class="pdf-actions">
+      <button class="btn-muted" onclick="clearPdf()">Clear</button>
+      <button class="btn-secondary" onclick="previewPdf()">Preview</button>
+      <button class="btn-primary" onclick="exportPdf()">Download PDF</button>
+    </div>
+    <div id="pdf-status"></div>
+
+    <div id="preview-section">
+      <div id="preview-label">Preview</div>
+      <div id="md-preview"></div>
+    </div>
   </div>
 
   <script>
+    // Tab switching
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', (i === 0) === (tab === 'to-md')))
+      document.getElementById('panel-to-md').classList.toggle('active', tab === 'to-md')
+      document.getElementById('panel-to-pdf').classList.toggle('active', tab === 'to-pdf')
+    }
+
+    // ── File → Markdown ──────────────────────────────────────────
     const dropZone = document.getElementById('drop-zone')
     const fileInput = document.getElementById('file-input')
     const status = document.getElementById('status')
@@ -170,7 +254,6 @@
 
     document.getElementById('browse-link').addEventListener('click', () => fileInput.click())
     fileInput.addEventListener('change', () => { if (fileInput.files[0]) convert(fileInput.files[0]) })
-
     dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over') })
     dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'))
     dropZone.addEventListener('drop', (e) => {
@@ -182,20 +265,13 @@
     async function convert(file) {
       status.textContent = `Converting ${file.name}...`
       resultSection.style.display = 'none'
-
       const form = new FormData()
       form.append('file', file)
-
       try {
         const endpoint = window.location.hostname === 'localhost' ? '/convert' : '/.netlify/functions/convert'
         const res = await fetch(endpoint, { method: 'POST', body: form })
         const data = await res.json()
-
-        if (data.error) {
-          status.textContent = 'Error: ' + data.error
-          return
-        }
-
+        if (data.error) { status.textContent = 'Error: ' + data.error; return }
         currentMarkdown = data.markdown
         currentFilename = data.filename
         output.textContent = data.markdown
@@ -209,15 +285,18 @@
 
     function copyMarkdown() {
       navigator.clipboard.writeText(currentMarkdown)
-        .then(() => { const btn = document.querySelector('.btn-copy'); btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy', 1500) })
+        .then(() => { const btn = document.querySelector('.btn-primary'); btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy', 1500) })
     }
 
     function downloadMarkdown() {
       const blob = new Blob([currentMarkdown], { type: 'text/markdown' })
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = currentFilename
-      a.click()
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = currentFilename; a.click()
+    }
+
+    function sendToPdf() {
+      document.getElementById('md-input').value = currentMarkdown
+      switchTab('to-pdf')
+      previewPdf()
     }
 
     function clearResult() {
@@ -225,6 +304,67 @@
       output.textContent = ''
       status.textContent = ''
       fileInput.value = ''
+    }
+
+    // ── Markdown → PDF ────────────────────────────────────────────
+    function previewPdf() {
+      const md = document.getElementById('md-input').value.trim()
+      if (!md) { document.getElementById('pdf-status').textContent = 'Nothing to preview.'; return }
+      document.getElementById('md-preview').innerHTML = marked.parse(md)
+      document.getElementById('preview-section').style.display = 'block'
+      document.getElementById('pdf-status').textContent = ''
+    }
+
+    async function exportPdf() {
+      const md = document.getElementById('md-input').value.trim()
+      if (!md) { document.getElementById('pdf-status').textContent = 'Paste some markdown first.'; return }
+
+      document.getElementById('pdf-status').textContent = 'Generating PDF...'
+
+      // Render into the preview first
+      document.getElementById('md-preview').innerHTML = marked.parse(md)
+      document.getElementById('preview-section').style.display = 'block'
+
+      const preview = document.getElementById('md-preview')
+      const { jsPDF } = window.jspdf
+
+      try {
+        const canvas = await html2canvas(preview, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
+        const imgData = canvas.toDataURL('image/png')
+        const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+        const pageW = pdf.internal.pageSize.getWidth()
+        const pageH = pdf.internal.pageSize.getHeight()
+        const imgW = pageW - 20
+        const imgH = (canvas.height * imgW) / canvas.width
+        let yPos = 10
+        let remaining = imgH
+
+        while (remaining > 0) {
+          const sliceH = Math.min(remaining, pageH - 20)
+          const srcY = (imgH - remaining) * (canvas.height / imgH)
+          const srcH = sliceH * (canvas.height / imgH)
+          const sliceCanvas = document.createElement('canvas')
+          sliceCanvas.width = canvas.width
+          sliceCanvas.height = srcH
+          sliceCanvas.getContext('2d').drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH)
+          if (remaining < imgH) pdf.addPage()
+          pdf.addImage(sliceCanvas.toDataURL('image/png'), 'PNG', 10, yPos, imgW, sliceH)
+          remaining -= sliceH
+          yPos = 10
+        }
+
+        pdf.save('document.pdf')
+        document.getElementById('pdf-status').textContent = 'PDF downloaded.'
+      } catch (err) {
+        document.getElementById('pdf-status').textContent = 'Error: ' + err.message
+      }
+    }
+
+    function clearPdf() {
+      document.getElementById('md-input').value = ''
+      document.getElementById('md-preview').innerHTML = ''
+      document.getElementById('preview-section').style.display = 'none'
+      document.getElementById('pdf-status').textContent = ''
     }
   </script>
 </body>
