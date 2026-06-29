@@ -29,7 +29,7 @@ exports.handler = async (event) => {
 
     if (ext === 'pdf') {
       // Require inside handler to avoid pdf-parse filesystem issues at cold start
-      const pdfParse = require('pdf-parse/lib/pdf-parse.js')
+      const pdfParse = require('pdf-parse')
       const data = await pdfParse(buffer)
       markdown = data.text
         .split('\n')
