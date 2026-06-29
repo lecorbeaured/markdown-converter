@@ -1,4 +1,3 @@
-const pdfParse = require('pdf-parse')
 const mammoth = require('mammoth')
 const XLSX = require('xlsx')
 const { parse } = require('csv-parse/sync')
@@ -14,7 +13,6 @@ exports.handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ error: 'Expected multipart/form-data' }) }
     }
 
-    // Parse multipart manually
     const boundary = contentType.split('boundary=')[1]
     const body = Buffer.from(event.body, event.isBase64Encoded ? 'base64' : 'utf8')
     const parts = parseMultipart(body, boundary)
@@ -30,6 +28,8 @@ exports.handler = async (event) => {
     let markdown = ''
 
     if (ext === 'pdf') {
+      // Require inside handler to avoid pdf-parse filesystem issues at cold start
+      const pdfParse = require('pdf-parse/lib/pdf-parse.js')
       const data = await pdfParse(buffer)
       markdown = data.text
         .split('\n')
@@ -56,18 +56,18 @@ exports.handler = async (event) => {
       }
     } else if (ext === 'xlsx' || ext === 'xls') {
       const workbook = XLSX.read(buffer, { type: 'buffer' })
-      const parts = []
+      const sections = []
       workbook.SheetNames.forEach(name => {
         const sheet = workbook.Sheets[name]
         const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 })
         if (rows.length === 0) return
-        parts.push(`## ${name}\n`)
+        sections.push(`## ${name}\n`)
         const header = '| ' + rows[0].join(' | ') + ' |'
         const divider = '| ' + rows[0].map(() => '---').join(' | ') + ' |'
         const dataRows = rows.slice(1).map(r => '| ' + r.join(' | ') + ' |')
-        parts.push([header, divider, ...dataRows].join('\n'))
+        sections.push([header, divider, ...dataRows].join('\n'))
       })
-      markdown = parts.join('\n\n')
+      markdown = sections.join('\n\n')
     } else if (ext === 'txt' || ext === 'md' || ext === 'html') {
       markdown = buffer.toString('utf8')
     } else {
@@ -83,6 +83,7 @@ exports.handler = async (event) => {
       })
     }
   } catch (err) {
+    console.error('Convert error:', err)
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) }
   }
 }
